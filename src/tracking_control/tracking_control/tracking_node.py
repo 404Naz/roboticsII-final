@@ -226,9 +226,9 @@ class TrackingNode(Node):
 
         except TransformException as e:
             self.get_logger().error('Transform error: ' + str(e))
-            return None,None,None
+            return None,None,None,None
         
-        return start_pose, obstacle_pose, goal_pose
+        return robot_pos, obstacle_pose, goal_pose, robot_world_R
     
     def timer_update(self):
         self.get_logger().info("Timer")
@@ -250,7 +250,7 @@ class TrackingNode(Node):
             return
         
         # Get the current object pose in the robot base_footprint frame
-        current_start_pose, current_obs_pose, current_goal_pose = self.get_current_poses()
+        current_robot_pos, current_obs_pose, current_goal_pose, robot_rot = self.get_current_poses()
         
         cmd_vel = Twist()
 
@@ -263,7 +263,7 @@ class TrackingNode(Node):
                 return
 
             # TODO: get the control velocity command
-        cmd_vel = self.controller(current_start_pose, current_obs_pose, current_goal_pose)
+        cmd_vel = self.controller(current_robot_pos, robot_rot, current_obs_pose, current_goal_pose)
             # elif self.start_pose is not None:
                 # self.get_logger().info(f"start: {current_start_pose[:2]}")
             # if current_obs_pose is not None:
@@ -281,13 +281,18 @@ class TrackingNode(Node):
         self.pub_control_cmd.publish(cmd_vel)
         #################################################
     
-    def controller(self, start_pose, obj_pose, goal_pose):
+    def controller(self, robot_pos_world, robot_rot, obj_pose_world, goal_pose_world):
         # Instructions: You can implement your own control algorithm here
         # feel free to modify the code structure, add more parameters, more input variables for the function, etc.
         
         ########### Write your code here ###########
+        
+        # convert everything to camera/robot frame
+        target_pose = robot_rot@goal_pose_world+robot_pos_world
+        robot_pose_cam = np.zeros(2)
+        
         cmd_vel = Twist()
-        if (goal_pose is None and self.approach):
+        if (goal_pose_world is None and self.approach):
             self.get_logger().info("Goal is None. NO TARGET")
             return cmd_vel
         
@@ -303,18 +308,8 @@ class TrackingNode(Node):
         scale1 = 1.0
         scale2 = 1.0
 
-        robot_pose = np.zeros(2)
-        if self.approach: # The goal pose is relative to robot camera
-            target_pose = goal_pose
-
-        else:
-            target_pose = start_pose
-
-        if np.linalg.norm(target_pose) < 0.3:
-            return cmd_vel
-
-        attractive_str = 0.5*scale1*((np.linalg.norm(target_pose[:2]-robot_pose[:2]))**2)
-        attractive_direction = scale1*(target_pose[:2]-robot_pose[:2])
+        attractive_str = 0.5*scale1*((np.linalg.norm(target_pose[:2]-robot_pose_cam[:2]))**2)
+        attractive_direction = scale1*(target_pose[:2]-robot_pose_cam[:2])
 
         repulsive_direction = np.zeros(2)
         repulsive_str = 0
@@ -322,10 +317,10 @@ class TrackingNode(Node):
         if self.obs_pose is not None:
             EPSILON = 1e-6
             FIELD = 0.5
-            d_q = max(np.linalg.norm(obj_pose[:2] - robot_pose[:2]), EPSILON) # prevent divide by zero
+            d_q = max(np.linalg.norm(obj_pose_world[:2] - robot_pose_cam[:2]), EPSILON) # prevent divide by zero
             if d_q < FIELD:
                 repulsive_str += 0.5*scale2*(((1 / d_q)-(1 / FIELD))**2)
-                g_dq = (obj_pose[:2] - robot_pose[:2]) / d_q
+                g_dq = (obj_pose_world[:2] - robot_pose_cam[:2]) / d_q
                 repulsive_direction += 0.5*scale2*((1 / FIELD)-(1 / d_q)) * (1 / (d_q**2)) * g_dq
 
         total_direction = (attractive_direction+repulsive_direction) / np.linalg.norm((attractive_direction+repulsive_direction))
