@@ -8,6 +8,34 @@ import math
 import time
 from collections import deque
 
+MINE = 0
+GOAL = 1
+OBJECT_DELTA = 0.2
+
+FIELD = 0.3
+
+class RobotObject:
+    def __init__(self, point, objtype) -> None:
+        self.point = point
+        self.objtype = objtype
+
+    def __eq__(self, value: object) -> bool:
+        if (not isinstance(value, RobotObject)) or (value.objtype != self.objtype):
+            return False
+        if (np.linalg.norm(np.array(value.point)-np.array(self.point)) < OBJECT_DELTA):
+            return True
+        return False
+    
+    def update_position(self, value):
+        if (not isinstance(value, RobotObject)) or (value.objtype != self.objtype):
+            return
+        self.point[0] = (self.point[0] + value.point[0]) / 2
+        self.point[1] = (self.point[1] + value.point[1]) / 2
+        self.point[2] = (self.point[2] + value.point[2]) / 2
+
+    def __repr__(self) -> str:
+        return f"({self.point[0], self.point[1]})"
+
 ## Functions for quaternion and rotation matrix conversion
 ## The code is adapted from the general_robotics_toolbox package
 ## Code reference: https://github.com/rpiRobotics/rpi_general_robotics_toolbox_py
@@ -69,7 +97,7 @@ class TrackingNode(Node):
         self.get_logger().info('Tracking Node Started')
         
         # Current object pose
-        self.obs_pose = None
+        self.obs_poses = []
         self.goal_pose = None
         self.start_pose = None
         
@@ -90,7 +118,7 @@ class TrackingNode(Node):
 
         self.start_position = np.zeros(2)
         self.approach = True
-        self.set_start_position = True
+        # self.set_start_position = True
 
         # Create timer, running at 100Hz
         self.timer = self.create_timer(0.05, self.timer_update)
@@ -112,8 +140,7 @@ class TrackingNode(Node):
         # You can decide to filter the detected object pose here
         # For example, you can filter the pose based on the distance from the camera
         # or the height of the object
-        # if np.linalg.norm(center_points) > 1: # or center_points[2] > 0.7:
-            # self.obs_pose = None
+        # if np.linalg.norm(center_points) > FIELD: # or center_points[2] > 0.7:
             # return
         
         try:
@@ -126,7 +153,12 @@ class TrackingNode(Node):
             return
         
         # Get the detected object pose in the world frame
-        self.obs_pose = cp_world
+        obstacle = RobotObject(cp_world, MINE)
+        if obstacle not in self.obs_poses:
+            self.obs_poses.append(obstacle)
+        else:
+            pos = self.obs_poses.index(obstacle)
+            self.obs_poses[pos].update_position(obstacle)
 
     def detected_start_pose_callback(self, msg):
         #self.get_logger().info('Received Detected Object Pose')
@@ -167,9 +199,9 @@ class TrackingNode(Node):
         # You can decide to filter the detected object pose here
         # For example, you can filter the pose based on the distance from the camera
         # or the height of the object
-        if np.linalg.norm(center_points) < 0.3 or not self.approach: #or center_points[2] > 0.7:
+        if np.linalg.norm(center_points[:2]) < 0.3 or not self.approach: #or center_points[2] > 0.7:
             self.approach = False
-            self.goal_pose = self.start_position
+            self.get_logger().info(f"Obstacles: {self.obs_poses}"*20)
             return
         
         try:
@@ -187,12 +219,10 @@ class TrackingNode(Node):
     def start_tracking_callback(self, msg):
         self.get_logger().info("In start callback")
         if msg.data == "Start":
-            self.set_start_position = False
             self.approach = True
             self.steps = deque(maxlen=500)
             self.step_count = 0
         else:
-            self.set_start_position = True
             self.approach = True
 
     def get_current_poses(self):
@@ -207,31 +237,29 @@ class TrackingNode(Node):
             robot_world_z = transform.transform.translation.z
             robot_world_R = q2R([transform.transform.rotation.w, transform.transform.rotation.x, transform.transform.rotation.y, transform.transform.rotation.z])
             robot_pos = np.array([robot_world_x,robot_world_y,robot_world_z])
-            obstacle_pose = None
-            start_pose = None
-            if self.obs_pose is not None:
-                obstacle_pose = robot_world_R@self.obs_pose+robot_pos # np.array([robot_world_x,robot_world_y,robot_world_z])
-            if self.start_pose is not None:
-                start_pose = robot_world_R@self.start_pose+robot_pos
-            if self.approach:
-                self.start_pose = None
+            obstacle_poses = [(robot_world_R@np.array(obs.point)+robot_pos) for obs in self.obs_poses]
+            goal_pose = None
+            # if self.obs_poses is not None:
+            #     obstacle_pose = robot_world_R@self.obs_poses+robot_pos # np.array([robot_world_x,robot_world_y,robot_world_z])
+            if self.goal_pose is not None:
+            #     self.start_pose = None
                 goal_pose = robot_world_R@self.goal_pose+robot_pos # np.array([robot_world_x,robot_world_y,robot_world_z])
-            else:
-                goal_pose = self.start_position[:2]
+            # else:
+            #     goal_pose = self.start_position[:2]
     
             robot_pose = robot_world_R@robot_pos
 
-            if (self.set_start_position):
-                self.start_position = (robot_pose).copy()
+            # if (self.set_start_position):
+            #     self.start_position = (robot_pose).copy()
 
         except TransformException as e:
             self.get_logger().error('Transform error: ' + str(e))
             return None,None,None,None
         
-        return robot_pos, obstacle_pose, goal_pose, robot_world_R
+        return robot_pos, obstacle_poses, goal_pose, robot_world_R
     
     def timer_update(self):
-        self.get_logger().info("Timer")
+        # self.get_logger().info("Timer")
         ################### Write your code here ###################
         
         # Now, the robot stops if the object is not detected
@@ -258,7 +286,7 @@ class TrackingNode(Node):
             # self.get_logger().info(f"goal: {current_goal_pose[:2]}")
             if np.linalg.norm(current_goal_pose) <= 0.35:
                 self.approach = False
-                self.get_logger().info("Goal Achieved.\n"*20)
+                self.get_logger().info(f"{self.obs_poses}\n"*20)
                 self.pub_control_cmd.publish(Twist())
                 return
 
@@ -269,7 +297,7 @@ class TrackingNode(Node):
             # if current_obs_pose is not None:
             #     self.get_logger().info(f"obj: {current_obs_pose[:2]}")
         
-        self.get_logger().info(f"{len(self.steps)} ; {self.step_count}")
+        # self.get_logger().info(f"{len(self.steps)} ; {self.step_count}")
     
         # self.get_logger().info(f"vel: {cmd_vel}")
         
@@ -281,32 +309,22 @@ class TrackingNode(Node):
         self.pub_control_cmd.publish(cmd_vel)
         #################################################
     
-    def controller(self, robot_pos_world, robot_rot, obj_pose_world, goal_pose_world):
+    def controller(self, robot_pos_world, robot_rot, obj_poses_world, target_pose):
         # Instructions: You can implement your own control algorithm here
         # feel free to modify the code structure, add more parameters, more input variables for the function, etc.
         
         ########### Write your code here ###########
         
         # convert everything to camera/robot frame
-        target_pose = robot_rot@goal_pose_world+robot_pos_world
         robot_pose_cam = np.zeros(2)
-        
+
         cmd_vel = Twist()
-        if (goal_pose_world is None and self.approach):
+        if (target_pose is None and self.approach):
             self.get_logger().info("Goal is None. NO TARGET")
-            return cmd_vel
-        
-        if not self.approach and self.step_count is not None:
-            oldx, oldy = self.steps[len(self.steps)-1-round(self.step_count)]
-            cmd_vel.linear.x = -oldx
-            cmd_vel.linear.y = -oldy
-            self.step_count += 0.9
-            return cmd_vel
-        elif not self.approach and len(self.steps) <= 0:
             return cmd_vel
 
         scale1 = 1.0
-        scale2 = 1.0
+        scale2 = 1.25
 
         attractive_str = 0.5*scale1*((np.linalg.norm(target_pose[:2]-robot_pose_cam[:2]))**2)
         attractive_direction = scale1*(target_pose[:2]-robot_pose_cam[:2])
@@ -314,9 +332,8 @@ class TrackingNode(Node):
         repulsive_direction = np.zeros(2)
         repulsive_str = 0
 
-        if self.obs_pose is not None:
+        for obj_pose_world in obj_poses_world:
             EPSILON = 1e-6
-            FIELD = 0.5
             d_q = max(np.linalg.norm(obj_pose_world[:2] - robot_pose_cam[:2]), EPSILON) # prevent divide by zero
             if d_q < FIELD:
                 repulsive_str += 0.5*scale2*(((1 / d_q)-(1 / FIELD))**2)
@@ -327,7 +344,7 @@ class TrackingNode(Node):
         total_field = attractive_str+repulsive_str
 
         K_V = 1.0
-        MAX_SPEED = 5.0
+        MAX_SPEED = 2.0
 
         strength = np.clip(total_field, -MAX_SPEED, MAX_SPEED)
 
