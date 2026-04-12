@@ -12,12 +12,14 @@ MINE = 0
 GOAL = 1
 OBJECT_DELTA = 0.2
 
-FIELD = 0.3
+FIELD = 0.5
+DETECTION_RANGE = 0.75
 
 class RobotObject:
     def __init__(self, point, objtype) -> None:
         self.point = point
         self.objtype = objtype
+        self.count = 0
 
     def __eq__(self, value: object) -> bool:
         if (not isinstance(value, RobotObject)) or (value.objtype != self.objtype):
@@ -126,7 +128,6 @@ class TrackingNode(Node):
         self.counter2 = 0
         self.step_count = 0
         self.steps = deque(maxlen=500)
-        self.steps.append(Twist())
     
     def detected_obs_pose_callback(self, msg):
         #self.get_logger().info('Received Detected Object Pose')
@@ -140,8 +141,8 @@ class TrackingNode(Node):
         # You can decide to filter the detected object pose here
         # For example, you can filter the pose based on the distance from the camera
         # or the height of the object
-        # if np.linalg.norm(center_points) > FIELD: # or center_points[2] > 0.7:
-            # return
+        if np.linalg.norm(center_points[:2]) > DETECTION_RANGE: # or center_points[2] > 0.7:
+            return
         
         try:
             # Transform the center point from the camera frame to the world frame
@@ -152,13 +153,17 @@ class TrackingNode(Node):
             self.get_logger().error('Transform Error: {}'.format(e))
             return
         
+        self.get_logger().info(f"Detected obstacle at {cp_world}")
+
         # Get the detected object pose in the world frame
         obstacle = RobotObject(cp_world, MINE)
         if obstacle not in self.obs_poses:
+            obstacle.count += 1
             self.obs_poses.append(obstacle)
         else:
             pos = self.obs_poses.index(obstacle)
             self.obs_poses[pos].update_position(obstacle)
+            self.obs_poses[pos].count += 1
 
     def detected_start_pose_callback(self, msg):
         #self.get_logger().info('Received Detected Object Pose')
@@ -186,6 +191,24 @@ class TrackingNode(Node):
         # Get the detected object pose in the world frame
         self.start_pose = cp_world
         # self.get_logger().info(f"Recieved Start Pose, start: {self.start_pose}, goal: {self.goal_pose}")
+
+    def set_goal_pose(self, destination_camera):
+        # currently does not work
+        base_frame = "base_footprint"
+        world_frame = self.get_parameter("world_frame_id").get_parameter_value().string_value
+
+        try:
+            # Transform the center point from the camera frame to the world frame
+            transform = self.tf_buffer.lookup_transform(world_frame,base_frame,rclpy.time.Time(),rclpy.duration.Duration(seconds=0.1))
+            t_R = q2R(np.array([transform.transform.rotation.w,transform.transform.rotation.x,transform.transform.rotation.y,transform.transform.rotation.z]))
+            cp_world = t_R@destination_camera+np.array([transform.transform.translation.x,transform.transform.translation.y,transform.transform.translation.z])
+        except TransformException as e:
+            self.get_logger().error('Transform Error: {}'.format(e))
+            self.goal_pose = np.array([0,0,0])
+            return
+        
+        self.get_logger().info(f"Goal Pose: {cp_world}")
+        self.goal_pose = cp_world
 
     def detected_goal_pose_callback(self, msg):
         #self.get_logger().info('Received Detected Object Pose')
@@ -222,6 +245,8 @@ class TrackingNode(Node):
             self.approach = True
             self.steps = deque(maxlen=500)
             self.step_count = 0
+            self.obs_poses = []
+            # self.set_goal_pose(np.array([5,0,0]))
         else:
             self.approach = True
 
@@ -230,7 +255,7 @@ class TrackingNode(Node):
         odom_id = self.get_parameter('world_frame_id').get_parameter_value().string_value
         # Get the current robot pose
         try:
-            # from base_footprint to odom
+            # from base_footprint to odom (camera/robot frame)
             transform = self.tf_buffer.lookup_transform('base_footprint', odom_id, rclpy.time.Time())
             robot_world_x = transform.transform.translation.x
             robot_world_y = transform.transform.translation.y
@@ -270,20 +295,19 @@ class TrackingNode(Node):
             self.pub_control_cmd.publish(Twist())
             return       
         if (self.approach and self.goal_pose is None):
-            cmd_vel = Twist()
-            cmd_vel.linear.x = 0.0
-            cmd_vel.angular.z = 1.0
-            self.pub_control_cmd.publish(cmd_vel)
             self.get_logger().info("NO GOAL")
             return
         
         # Get the current object pose in the robot base_footprint frame
         current_robot_pos, current_obs_pose, current_goal_pose, robot_rot = self.get_current_poses()
+
+        if current_robot_pos is None or current_goal_pose is None:
+            return
         
         cmd_vel = Twist()
 
         if self.approach:
-            # self.get_logger().info(f"goal: {current_goal_pose[:2]}")
+            self.get_logger().info(f"goal: {current_goal_pose[:2]} loc: {current_robot_pos[:2]}")
             if np.linalg.norm(current_goal_pose) <= 0.35:
                 self.approach = False
                 self.get_logger().info(f"{self.obs_poses}\n"*20)
@@ -305,9 +329,9 @@ class TrackingNode(Node):
             self.get_logger().info("NOT A TWIST MSG")
             return
 
+        # self.steps.append()
         # publish the control command
         self.pub_control_cmd.publish(cmd_vel)
-        #################################################
     
     def controller(self, robot_pos_world, robot_rot, obj_poses_world, target_pose):
         # Instructions: You can implement your own control algorithm here
