@@ -71,8 +71,18 @@ def PotentialField(pos, goal, detected, field=FIELD, k_att=1.0, k_rep=1000.0):
 
     return attractive_force+repulsive_force
 
+def distance_to_closest_obstacle(pos, obstacles):
+    min_dist = 1000
+    for obstacle in obstacles:
+        ob_dist = np.linalg.norm(pos-obstacle)
+        if ob_dist < min_dist:
+            min_dist = ob_dist
+    return min_dist
+
 class BicycleRobot:
-    def __init__(self, w, h, L, x, y, r, loc_particles, R, Q, detect_range, detect_fov_deg) -> None:
+    def __init__(self, name, color, w, h, L, x, y, r, loc_particles, R, Q, detect_range, detect_fov_deg) -> None:
+        self.name = name
+        self.color = color
         self.width = w
         self.height = h
         self.L = L
@@ -83,6 +93,10 @@ class BicycleRobot:
         self.detection_range = detect_range
         self.detection_fov_rad = np.deg2rad(detect_fov_deg)
         self.detected_obs = set()
+        self.timer = 0
+        self.path_len = 0
+        self.error_over_time = []
+        self.distance_to_closest_object = []
 
     # shape generation by copilot 04/14/2026
     def get_detector_polygon(self, num_points=30):
@@ -179,6 +193,9 @@ class BicycleRobot:
         return detections
 
     def controller(self, goal_position, dt, obstacles):
+        """Runs with timestep dt. Returns True while running and False when complete."""
+        if (np.linalg.norm(self.true_pos[:2] - goal_position[:2]) < 0.25):
+            return False
         mean = np.array(particle_mean(self.particles))
         detected = self.detect(obstacles, True)
         self.detected_obs.update(map(tuple, detected))
@@ -199,3 +216,8 @@ class BicycleRobot:
         self.particles = ParticleFilter(self.particles, u_t, z_t, self.R, self.Q)
 
         self.true_pos += u_t
+        self.path_len += np.linalg.norm(u_t[:2])
+        self.timer += dt
+        self.distance_to_closest_object.append(distance_to_closest_obstacle(self.true_pos[:2], obstacles))
+        self.error_over_time.append(np.linalg.norm(mean[:2] - self.true_pos[:2]))
+        return True
