@@ -47,7 +47,10 @@ def ParticleFilter(particles, u_t, z_t, R, Q) -> list[tuple]:
         weights.append(weight)
     
     weights = np.array(weights)
-    weights /= sum(weights)
+    if sum(weights != 0):
+        weights /= sum(weights)
+    else:
+        weights = np.zeros_like(weights)
 
     # X_bar = [(predict[i], weights[i]) for i in range(len(predict))]
 
@@ -86,8 +89,12 @@ class BicycleRobot:
         self.width = w
         self.height = h
         self.L = L
+        self.x_init = x
+        self.y_init = y
+        self.r_init = r
         self.true_pos = np.array([x,y,r], dtype=float)
-        self.particles = loc_particles
+        self.particles_init = loc_particles
+        self.particles = loc_particles.copy()
         self.R = R
         self.Q = Q
         self.detection_range = detect_range
@@ -97,6 +104,15 @@ class BicycleRobot:
         self.path_len = 0
         self.error_over_time = []
         self.distance_to_closest_object = []
+
+    def reset(self):
+        self.true_pos = np.array([self.x_init,self.y_init,self.r_init], dtype=float)
+        self.detected_obs = set()
+        self.timer = 0
+        self.path_len = 0
+        self.error_over_time = []
+        self.distance_to_closest_object = []
+        self.particles = self.particles_init.copy()
 
     # shape generation by copilot 04/14/2026
     def get_detector_polygon(self, num_points=30):
