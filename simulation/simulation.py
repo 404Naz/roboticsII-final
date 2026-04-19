@@ -4,6 +4,7 @@ import time
 import math
 
 from robot import BicycleRobot
+from scipy.interpolate import interp1d
 
 delta_t = 0.1
 
@@ -27,7 +28,6 @@ Q = np.array([[0.1, 0, 0], [0, 0.1,0], [0, 0, 0.001]])
 
 def simulation(robots_lst, obstacles_lst, iteration):
     num_robots = len(robots_lst)
-    plt.ion()
     figs = []
     axes = []
 
@@ -50,7 +50,8 @@ def simulation(robots_lst, obstacles_lst, iteration):
         robot.reset()
 
     running = True
-    while (running):
+    timer = 0
+    while (running and timer < 120): # limit each sim to 2 mins
         plt.pause(PAUSE_TIME)
         time.sleep(PAUSE_TIME)
 
@@ -66,35 +67,27 @@ def simulation(robots_lst, obstacles_lst, iteration):
             # redraw robot
             robot_plots[i] = robot.draw_robot(axes[i])
 
+        timer += delta_t
+
     for robot, ax in zip(robots_lst, axes):
         x,y = zip(*robot.detected_obs)
         ax.scatter(x, y, s=10, c=robot.color, marker='x')
         print(f"{robot.color} robot time: {robot.timer}ms with path len: {robot.path_len}")
 
+    sim_res = dict()
+    sim_distance_to_objects = dict()
+    sim_err_over_time = dict()
+    sim_time = dict()
     for robot in robots_lst:
-        fig, ax = plt.subplots()
-        num_samples = int(robot.timer / delta_t)
-        times = np.linspace(0, robot.timer, num_samples)
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Distance (m)")
-        ax.set_title(f"Distance (error) between true and measured position {robot.name} (iteration {iteration})")
-        ax.grid(True)
-        ax.plot(times, robot.error_over_time)
+        sim_distance_to_objects[robot.name] = robot.distance_to_closest_object
+        sim_err_over_time[robot.name] = robot.error_over_time
+        sim_time[robot.name] = robot.timer
+    sim_res["DistToObj"] = sim_distance_to_objects
+    sim_res["ErrorOverTime"] = sim_err_over_time
+    sim_res["time"] = sim_time
+    return sim_res
 
-    for robot in robots_lst:
-        fig, ax = plt.subplots()
-        num_samples = int(robot.timer / delta_t)
-        times = np.linspace(0, robot.timer, num_samples)
-        ax.set_xlabel("Time (s)")
-        ax.set_ylabel("Distance (m)")
-        ax.set_title(f"Distance to closest obstacle {robot.name} (iteration {iteration})")
-        ax.grid(True)
-        ax.plot(times, robot.distance_to_closest_object)
-
-    plt.ioff()
-    plt.show()
-
-def main(num_iterations, initial_seed=0):
+def main(num_iterations=1, initial_seed=0, scale=1):
     particles = []
     obstacles = []
 
@@ -113,14 +106,59 @@ def main(num_iterations, initial_seed=0):
 
     print("Done generating particles")
 
+    simulation_results = dict()
+
+    plt.ion()
+
     for i in range(num_iterations):
         obstacles = []
         # constistent seed for testing
-        np.random.seed(initial_seed+2*i)
+        np.random.seed(initial_seed+scale*i)
         for _ in range(NUM_OBSTACLES):
             obstacles.append((np.random.uniform(XMIN,XMAX), np.random.uniform(YMIN,YMAX)))
-        simulation(robots, obstacles, i)
+        simulation_results[i] = simulation(robots, obstacles, i)
+
+    # for robot in robots:
+    #     fig, ax = plt.subplots()
+    #     num_samples = int(robot.timer / delta_t)
+    #     ax.set_xlabel("Time (s)")
+    #     ax.set_ylabel("Distance (m)")
+    #     ax.set_title(f"Distance (error) between true and measured position {robot.name}")
+    #     ax.grid(True)
+    #     for i in range(num_iterations):
+    #         times = np.linspace(0, simulation_results[i]["time"][robot.name], num_samples)
+    #         ax.plot(times, simulation_results[i]["ErrorOverTime"][robot.name], label=f"Iteration {i}")
+
+    COMMON_N = 200
+    t_common = np.linspace(0,1,COMMON_N)
+
+    for robot in robots:
+        fig, ax = plt.subplots()
+        ax.set_xlabel("Normalized Time")
+        ax.set_ylabel("Distance (m)")
+        ax.set_title(f"Distance to closest obstacle for {robot.name}")
+        ax.grid(True)
+        all_resampled = []
+        for i in range(num_iterations):
+            # plotting help by copilot 04/18/2026
+            dist = simulation_results[i]["DistToObj"][robot.name]
+            N = len(dist)
+            t_norm = np.linspace(0,1,N)
+            f = interp1d(t_norm, dist, kind='linear')
+            dist_resampled = f(t_common)
+            all_resampled.append(dist_resampled)
+            ax.plot(t_common, dist_resampled, label=f"Iteration {i}")
+
+        mean_curve = np.mean(np.vstack(all_resampled), axis=0)
+        ax.plot(t_common, mean_curve, color='black', linewidth=2, label="Mean")
+
+        plt.legend()
+
+    plt.ioff()
+    plt.show()
 
 if __name__ == '__main__':
-    NUM_ITERATIONS = 5
-    main(NUM_ITERATIONS)
+    NUM_ITERATIONS = 2
+    INIT_SEED = 0
+    SCALE = 1
+    main(num_iterations=NUM_ITERATIONS, initial_seed=INIT_SEED, scale=SCALE)

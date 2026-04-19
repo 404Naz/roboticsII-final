@@ -82,6 +82,38 @@ def distance_to_closest_obstacle(pos, obstacles):
             min_dist = ob_dist
     return min_dist
 
+# written by copilot 04/18/2026 to implement object filtering within a tolerance
+class ClusterMeanSet:
+    def __init__(self, tol=1):
+        self.tol = tol
+        self.clusters = []   # each cluster: {"mean": np.array([x,y]), "count": N}
+
+    def add(self, point):
+        point = np.asarray(point)
+
+        # Try to merge with an existing cluster
+        for cluster in self.clusters:
+            if np.linalg.norm(point - cluster["mean"]) < self.tol:
+                # Incremental mean update
+                n = cluster["count"]
+                cluster["mean"] = cluster["mean"] + (point - cluster["mean"]) / (n + 1)
+                cluster["count"] += 1
+                return
+
+        # Otherwise create a new cluster
+        self.clusters.append({"mean": point.copy(), "count": 1})
+
+    def get_points(self):
+        """Return list of cluster means as Nx2 array."""
+        return [c["mean"] for c in self.clusters]
+
+    def __iter__(self):
+        return iter(self.get_points())
+
+    def __len__(self):
+        return len(self.clusters)
+
+
 class BicycleRobot:
     def __init__(self, name, color, w, h, L, x, y, r, loc_particles, R, Q, detect_range, detect_fov_deg) -> None:
         self.name = name
@@ -99,7 +131,7 @@ class BicycleRobot:
         self.Q = Q
         self.detection_range = detect_range
         self.detection_fov_rad = np.deg2rad(detect_fov_deg)
-        self.detected_obs = set()
+        self.detected_obs = ClusterMeanSet()
         self.timer = 0
         self.path_len = 0
         self.error_over_time = []
@@ -107,7 +139,7 @@ class BicycleRobot:
 
     def reset(self):
         self.true_pos = np.array([self.x_init,self.y_init,self.r_init], dtype=float)
-        self.detected_obs = set()
+        self.detected_obs = ClusterMeanSet()
         self.timer = 0
         self.path_len = 0
         self.error_over_time = []
@@ -214,7 +246,8 @@ class BicycleRobot:
             return False
         mean = np.array(particle_mean(self.particles))
         detected = self.detect(obstacles, True)
-        self.detected_obs.update(map(tuple, detected))
+        for obj in detected:
+            self.detected_obs.add(obj)
 
         F = PotentialField(mean, goal_position, self.detected_obs, field=self.detection_range*max(self.width, self.height))
         theta_ = np.atan2(F[1], F[0])
