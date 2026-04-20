@@ -115,7 +115,7 @@ class ClusterMeanSet:
 
 
 class BicycleRobot:
-    def __init__(self, name, color, w, h, L, x, y, r, loc_particles, R, Q, detect_range, detect_fov_deg) -> None:
+    def __init__(self, name, color, w, h, L, x, y, r, loc_particles, R, Q, detect_range, detect_fov_deg, goal_positions) -> None:
         self.name = name
         self.color = color
         self.width = w
@@ -136,6 +136,8 @@ class BicycleRobot:
         self.path_len = 0
         self.error_over_time = []
         self.distance_to_closest_object = []
+        self.step = 0
+        self.positions = goal_positions.copy()
 
     def reset(self):
         self.true_pos = np.array([self.x_init,self.y_init,self.r_init], dtype=float)
@@ -145,6 +147,7 @@ class BicycleRobot:
         self.error_over_time = []
         self.distance_to_closest_object = []
         self.particles = self.particles_init.copy()
+        self.step = 0
 
     # shape generation by copilot 04/14/2026
     def get_detector_polygon(self, num_points=30):
@@ -240,10 +243,13 @@ class BicycleRobot:
 
         return detections
 
-    def controller(self, goal_position, dt, obstacles):
+    def controller(self, dt, obstacles):
         """Runs with timestep dt. Returns True while running and False when complete."""
-        if (np.linalg.norm(self.true_pos[:2] - goal_position[:2]) < 0.25):
+        if (self.step >= len(self.positions)):
             return False
+        
+        goal_position = self.positions[self.step]
+
         mean = np.array(particle_mean(self.particles))
         detected = self.detect(obstacles, True)
         for obj in detected:
@@ -269,4 +275,7 @@ class BicycleRobot:
         self.timer += dt
         self.distance_to_closest_object.append(distance_to_closest_obstacle(self.true_pos[:2], obstacles))
         self.error_over_time.append(np.linalg.norm(mean[:2] - self.true_pos[:2]))
+
+        if (np.linalg.norm(self.true_pos[:2] - goal_position[:2]) < 0.5):
+            self.step += 1
         return True

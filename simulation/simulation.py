@@ -63,7 +63,7 @@ def simulation(robots_lst, obstacles_lst, iteration):
             # Plot trajectory point
             axes[i].scatter(robot.true_pos[0], robot.true_pos[1], s=2, c=robot.color)
             # control robot
-            running |= robot.controller(goal_position=goal_position, obstacles=obstacles_lst, dt=delta_t)
+            running |= robot.controller(obstacles=obstacles_lst, dt=delta_t)
             # redraw robot
             robot_plots[i] = robot.draw_robot(axes[i])
 
@@ -97,9 +97,18 @@ def main(num_iterations=1, initial_seed=0, scale=1):
     for _ in range(NUM_PARTICLES):
         particles.append((np.random.uniform(-10,10), np.random.uniform(-10,10), np.random.uniform(-np.pi/12,np.pi/12)))
 
+    goal_positions = []
+    goal_positions.append((45, 2))
+    goal_positions.append((45, 7))
+    goal_positions.append((-45, 7))
+    goal_positions.append((-45, 12))
+
+    # final goal
+    goal_positions.append(goal_position)
+
     robots = [
-        BicycleRobot(name="B1", color="green", w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles.copy(), R=R, Q=Q, detect_range=5, detect_fov_deg=40),
-        BicycleRobot(name="B2", color="pink", w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles.copy(), R=R, Q=Q, detect_range=5, detect_fov_deg=80),
+        BicycleRobot(name="B1", color="green", w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles.copy(), R=R, Q=Q, detect_range=5, detect_fov_deg=40, goal_positions=goal_positions),
+        BicycleRobot(name="B2", color="pink", w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles.copy(), R=R, Q=Q, detect_range=5, detect_fov_deg=80, goal_positions=goal_positions),
         # BicycleRobot(name="B3", color="orange",w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles, R=R, Q=Q, detect_range=10, detect_fov_deg=40),
         # BicycleRobot(name="B4", color="blue",w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles, R=R, Q=Q, detect_range=10, detect_fov_deg=80),
     ]
