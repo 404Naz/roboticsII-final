@@ -138,6 +138,8 @@ class BicycleRobot:
         self.distance_to_closest_object = []
         self.step = 0
         self.positions = goal_positions.copy()
+        self.goal_distance = 1000.0
+        self.withinCycleDist = False
 
     def reset(self):
         self.true_pos = np.array([self.x_init,self.y_init,self.r_init], dtype=float)
@@ -148,6 +150,8 @@ class BicycleRobot:
         self.distance_to_closest_object = []
         self.particles = self.particles_init.copy()
         self.step = 0
+        self.goal_distance = 1000.0
+        self.withinCycleDist = False
 
     # shape generation by copilot 04/14/2026
     def get_detector_polygon(self, num_points=30):
@@ -276,6 +280,10 @@ class BicycleRobot:
         self.distance_to_closest_object.append(distance_to_closest_obstacle(self.true_pos[:2], obstacles))
         self.error_over_time.append(np.linalg.norm(mean[:2] - self.true_pos[:2]))
 
-        if (np.linalg.norm(self.true_pos[:2] - goal_position[:2]) < 0.5):
+        self.goal_distance = np.linalg.norm(self.true_pos[:2] - goal_position[:2])
+        if (self.goal_distance < 1.0):
+            self.withinCycleDist = True
+        if (self.goal_distance < 0.5 or (self.goal_distance > 1.0 and self.withinCycleDist)):
             self.step += 1
+            self.withinCycleDist = False
         return True

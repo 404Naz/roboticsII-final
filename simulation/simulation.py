@@ -6,7 +6,7 @@ import math
 from robot import BicycleRobot
 from scipy.interpolate import interp1d
 
-delta_t = 0.1
+delta_t = 0.2
 
 WIDTH = 1
 HEIGHT = 1.5
@@ -51,7 +51,7 @@ def simulation(robots_lst, obstacles_lst, iteration):
 
     running = True
     timer = 0
-    while (running and timer < 120): # limit each sim to 2 mins
+    while (running and timer < 1200): # limit each sim to 20 mins
         plt.pause(PAUSE_TIME)
         time.sleep(PAUSE_TIME)
 
@@ -70,9 +70,10 @@ def simulation(robots_lst, obstacles_lst, iteration):
         timer += delta_t
 
     for robot, ax in zip(robots_lst, axes):
-        x,y = zip(*robot.detected_obs)
-        ax.scatter(x, y, s=10, c=robot.color, marker='x')
-        print(f"{robot.color} robot time: {robot.timer}ms with path len: {robot.path_len}")
+        if (len(robot.detected_obs) > 0):
+            x,y = zip(*robot.detected_obs)
+            ax.scatter(x, y, s=10, c=robot.color, marker='x')
+            print(f"{robot.color} robot time: {robot.timer}ms with path len: {robot.path_len}")
 
     sim_res = dict()
     sim_distance_to_objects = dict()
@@ -98,10 +99,21 @@ def main(num_iterations=1, initial_seed=0, scale=1):
         particles.append((np.random.uniform(-10,10), np.random.uniform(-10,10), np.random.uniform(-np.pi/12,np.pi/12)))
 
     goal_positions = []
-    goal_positions.append((45, 2))
-    goal_positions.append((45, 7))
-    goal_positions.append((-45, 7))
-    goal_positions.append((-45, 12))
+    goal_positions.append((45, 5))
+    goal_positions.append((45, 10))
+    goal_positions.append((-45, 10))
+    goal_positions.append((-45, 15))
+    goal_positions.append((45, 15))
+    goal_positions.append((45, 20))
+    goal_positions.append((-45, 20))
+    goal_positions.append((-45, 25))
+    goal_positions.append((45, 25))
+    goal_positions.append((45, 30))
+    goal_positions.append((-45, 30))
+    goal_positions.append((-45, 35))
+    goal_positions.append((45, 35))
+    goal_positions.append((45, 40))
+    goal_positions.append((-45, 40))
 
     # final goal
     goal_positions.append(goal_position)
@@ -167,7 +179,7 @@ def main(num_iterations=1, initial_seed=0, scale=1):
     plt.show()
 
 if __name__ == '__main__':
-    NUM_ITERATIONS = 2
+    NUM_ITERATIONS = 3
     INIT_SEED = 0
-    SCALE = 1
+    SCALE = 2
     main(num_iterations=NUM_ITERATIONS, initial_seed=INIT_SEED, scale=SCALE)
