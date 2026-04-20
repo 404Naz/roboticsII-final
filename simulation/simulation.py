@@ -52,8 +52,8 @@ def simulation(robots_lst, obstacles_lst, iteration):
     running = True
     timer = 0
     while (running and timer < 1200): # limit each sim to 20 mins
-        plt.pause(PAUSE_TIME)
-        time.sleep(PAUSE_TIME)
+        # plt.pause(PAUSE_TIME)
+        # time.sleep(PAUSE_TIME)
 
         running = False
         
@@ -113,7 +113,6 @@ def main(num_iterations=1, initial_seed=0, scale=1):
     goal_positions.append((-45, 35))
     goal_positions.append((45, 35))
     goal_positions.append((45, 40))
-    goal_positions.append((-45, 40))
 
     # final goal
     goal_positions.append(goal_position)
@@ -179,7 +178,7 @@ def main(num_iterations=1, initial_seed=0, scale=1):
     plt.show()
 
 if __name__ == '__main__':
-    NUM_ITERATIONS = 3
-    INIT_SEED = 0
-    SCALE = 2
+    NUM_ITERATIONS = 5
+    INIT_SEED = np.random.randint(0,2**30)
+    SCALE = np.random.randint(0,2**6)
     main(num_iterations=NUM_ITERATIONS, initial_seed=INIT_SEED, scale=SCALE)
