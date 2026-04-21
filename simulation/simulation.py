@@ -4,9 +4,10 @@ import time
 import math
 
 from robot import BicycleRobot
+from robot import HolonomicRobot
 from scipy.interpolate import interp1d
 
-delta_t = 0.2
+delta_t = 0.1
 
 WIDTH = 1
 HEIGHT = 1.5
@@ -99,20 +100,20 @@ def main(num_iterations=1, initial_seed=0, scale=1):
         particles.append((np.random.uniform(-10,10), np.random.uniform(-10,10), np.random.uniform(-np.pi/12,np.pi/12)))
 
     goal_positions = []
-    goal_positions.append((45, 5))
-    goal_positions.append((45, 10))
-    goal_positions.append((-45, 10))
-    goal_positions.append((-45, 15))
-    goal_positions.append((45, 15))
-    goal_positions.append((45, 20))
-    goal_positions.append((-45, 20))
-    goal_positions.append((-45, 25))
-    goal_positions.append((45, 25))
-    goal_positions.append((45, 30))
-    goal_positions.append((-45, 30))
-    goal_positions.append((-45, 35))
-    goal_positions.append((45, 35))
-    goal_positions.append((45, 40))
+    # goal_positions.append((45, 5))
+    # goal_positions.append((45, 10))
+    # goal_positions.append((-45, 10))
+    # goal_positions.append((-45, 15))
+    # goal_positions.append((45, 15))
+    # goal_positions.append((45, 20))
+    # goal_positions.append((-45, 20))
+    # goal_positions.append((-45, 25))
+    # goal_positions.append((45, 25))
+    # goal_positions.append((45, 30))
+    # goal_positions.append((-45, 30))
+    # goal_positions.append((-45, 35))
+    # goal_positions.append((45, 35))
+    # goal_positions.append((45, 40))
 
     # final goal
     goal_positions.append(goal_position)
@@ -120,8 +121,8 @@ def main(num_iterations=1, initial_seed=0, scale=1):
     robots = [
         BicycleRobot(name="B1", color="green", w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles.copy(), R=R, Q=Q, detect_range=5, detect_fov_deg=40, goal_positions=goal_positions),
         BicycleRobot(name="B2", color="pink", w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles.copy(), R=R, Q=Q, detect_range=5, detect_fov_deg=80, goal_positions=goal_positions),
-        # BicycleRobot(name="B3", color="orange",w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles, R=R, Q=Q, detect_range=10, detect_fov_deg=40),
-        # BicycleRobot(name="B4", color="blue",w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles, R=R, Q=Q, detect_range=10, detect_fov_deg=80),
+        HolonomicRobot(name="H1", color="orange", w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles.copy(), R=R, Q=Q, detect_range=5, detect_fov_deg=40, goal_positions=goal_positions),
+        HolonomicRobot(name="H2", color="blue", w=WIDTH, h=HEIGHT, L=L, x=0, y=0, r=0, loc_particles=particles.copy(), R=R, Q=Q, detect_range=5, detect_fov_deg=80, goal_positions=goal_positions),
     ]
 
     print("Done generating particles")
